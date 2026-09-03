@@ -1,0 +1,5 @@
+.streamlit/secrets.toml
+*html
+current_data.csv
+.venv/
+.agents/
