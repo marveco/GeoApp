@@ -125,13 +125,13 @@ with st.sidebar:
             # NEW CODE (Compatible with Pandas 3.0+)
             df = pd.read_csv(uploaded_file)
 
-            # Fill numeric NaNs with 0
-            num_cols = df.select_dtypes(include=["number"]).columns
-            df[num_cols] = df[num_cols].fillna(0)
+            # # Fill numeric NaNs with 0
+            # num_cols = df.select_dtypes(include=["number"]).columns
+            # df[num_cols] = df[num_cols].fillna(0)
 
-            # Fill text/object NaNs with empty string and cast to str
-            non_num_cols = df.select_dtypes(exclude=["number"]).columns
-            df[non_num_cols] = df[non_num_cols].fillna("").astype(str)
+            # # Fill text/object NaNs with empty string and cast to str
+            # non_num_cols = df.select_dtypes(exclude=["number"]).columns
+            # df[non_num_cols] = df[non_num_cols].fillna("").astype(str)
             df.to_csv(DATA_FILE_PATH, index=False)
             st.success(f"Loaded {len(df)} rows")
 
@@ -388,7 +388,7 @@ def agent_node(state):
     1. IDENTIFY ACTIVE COLUMNS: Determine ONLY the specific columns needed for the current request (e.g., Latitude, Longitude, and the specific attribute column like 'period_of_day').
     2. SANITIZE SPATIAL DATA: Convert ONLY the active latitude/longitude columns using `pd.to_numeric(df[col], errors='coerce')` and filter out rows where coordinates are NaN or zero.
     3. SANITIZE ACTIVE ATTRIBUTE COLUMNS ONLY:
-       - For active numeric/sorting columns: Convert using `pd.to_numeric(..., errors='coerce')` and filter out NaNs for THAT column only.
+       - For active numeric/sorting columns: Convert using `pd.to_numeric(..., errors='coerce')` and filter out NaNs with 'df.dropna' for THAT column only.
        - For active categorical/color columns: Fill NaNs in THAT column with 'Unknown' or filter missing values for THAT column only.
     4. NO GLOBAL DROPPING: NEVER use `df.dropna()` across the whole DataFrame, and NEVER drop rows based on columns not requested by the user. Preserve as much data as possible.
 

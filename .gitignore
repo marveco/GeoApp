@@ -1,5 +1,8 @@
 .streamlit/secrets.toml
-*html
 current_data.csv
+map.html
+map_*.html
+session_log.json
+__pycache__/
 .venv/
 .agents/
