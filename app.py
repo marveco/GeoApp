@@ -108,59 +108,56 @@ _init_rename_state()
 # SIDEBAR — Data Centre + Conversation Manager
 # ---------------------------------------------------------------------------
 with st.sidebar:
-
-    # ── Data Centre ─────────────────────────────────────────────────────────
     st.header("📂 Data Centre")
     uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
-    data_summary  = "No data loaded."
 
-    if uploaded_file is not None:
-        try:
-            # OLD CODE (Fails in Pandas 3.0+)
-            # df = pd.read_csv(uploaded_file)
-            # object_cols = df.select_dtypes(include=["object"]).columns
-            # df[object_cols] = df[object_cols].astype(str)
-            # df.fillna(0, inplace=True)
+    # Unique file signature to detect uploads, removals, or file switches
+    file_signature = f"{uploaded_file.name}_{uploaded_file.size}" if uploaded_file is not None else None
+    last_signature = st.session_state.get("current_file_signature", None)
 
-            # NEW CODE (Compatible with Pandas 3.0+)
-            df = pd.read_csv(uploaded_file)
+    if file_signature != last_signature:
+        st.session_state["current_file_signature"] = file_signature
 
-            # # Fill numeric NaNs with 0
-            # num_cols = df.select_dtypes(include=["number"]).columns
-            # df[num_cols] = df[num_cols].fillna(0)
+        if uploaded_file is None:
+            # Case A: File was removed by user
+            if os.path.exists(DATA_FILE_PATH):
+                os.remove(DATA_FILE_PATH)
+            st.session_state["data_summary"] = "No data loaded."
+            _new_conversation()  # Clear stale conversation turns
+            st.rerun()
+        else:
+            # Case B: A new file was uploaded
+            try:
+                df = pd.read_csv(uploaded_file)
+                df.to_csv(DATA_FILE_PATH, index=False)
 
-            # # Fill text/object NaNs with empty string and cast to str
-            # non_num_cols = df.select_dtypes(exclude=["number"]).columns
-            # df[non_num_cols] = df[non_num_cols].fillna("").astype(str)
-            df.to_csv(DATA_FILE_PATH, index=False)
-            st.success(f"Loaded {len(df)} rows")
-
-            buffer = [
-                f"Filename: '{DATA_FILE_PATH}'",
-                f"Total Rows: {len(df)}",
-                "--- COLUMN ANALYSIS ---",
-            ]
-            for col in df.columns:
-                dtype = df[col].dtype
-                if pd.api.types.is_numeric_dtype(dtype):
-                    buffer.append(
-                        f"- {col} (Numeric): [{df[col].min()} to {df[col].max()}]"
-                    )
-                else:
-                    unique_vals = df[col].unique()
-                    if len(unique_vals) < 15:
-                        buffer.append(
-                            f"- {col} (Categorical): [{', '.join(map(str, unique_vals))}]"
-                        )
+                buffer = [
+                    f"Filename: '{DATA_FILE_PATH}'",
+                    f"Total Rows: {len(df)}",
+                    "--- COLUMN ANALYSIS ---",
+                ]
+                for col in df.columns:
+                    dtype = df[col].dtype
+                    if pd.api.types.is_numeric_dtype(dtype):
+                        buffer.append(f"- {col} (Numeric): [{df[col].min()} to {df[col].max()}]")
                     else:
-                        buffer.append(
-                            f"- {col} (Text): Example [{', '.join(map(str, unique_vals[:3]))}, ...]"
-                        )
-            data_summary = "\n".join(buffer)
-            with st.expander("LLM View"):
-                st.text(data_summary)
-        except Exception as e:
-            st.error(f"Error: {e}")
+                        unique_vals = df[col].unique()
+                        if len(unique_vals) < 15:
+                            buffer.append(f"- {col} (Categorical): [{', '.join(map(str, unique_vals))}]")
+                        else:
+                            buffer.append(f"- {col} (Text): Example [{', '.join(map(str, unique_vals[:3]))}, ...]")
+
+                st.session_state["data_summary"] = "\n".join(buffer)
+                _new_conversation()  # Start fresh chat for the new dataset
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error reading uploaded file: {e}")
+
+    # Retrieve data summary from session state
+    data_summary = st.session_state.get("data_summary", "No data loaded.")
+    if data_summary != "No data loaded.":
+        with st.expander("LLM View"):
+            st.text(data_summary)
 
         # ── Conversation Manager ─────────────────────────────────────────────────
     st.divider()
@@ -517,17 +514,20 @@ def router(state: AgentState):
 workflow = StateGraph(AgentState)
 #workflow.add_node("decomposer", decomposer_node)
 workflow.add_node("retriever", retriever_node)
-workflow.add_node("agent", agent_node) # Existing[cite: 1]
-workflow.add_node("refiner", refiner_node) # Existing[cite: 1]
-workflow.add_node("execute_code", execute_node) # Existing[cite: 1]
+workflow.add_node("agent", agent_node)
+workflow.add_node("execute_code", execute_node)
+workflow.add_node("refiner", refiner_node)
 
 #workflow.set_entry_point("decomposer")
 workflow.set_entry_point("retriever")
 #workflow.add_edge("decomposer", "retriever")
 workflow.add_edge("retriever", "agent")
-workflow.add_edge("agent", "refiner") # Existing[cite: 1]
-workflow.add_edge("refiner", "execute_code") # Existing[cite: 1]
-workflow.add_conditional_edges("execute_code", router) # Existing[cite: 1]
+workflow.add_edge("agent", "execute_code")
+
+# Conditional routing based on execution success
+workflow.add_conditional_edges("execute_code", router, {"agent": "refiner", END: END})
+workflow.add_edge("refiner", "execute_code")
+
 app_graph = workflow.compile()
 
 

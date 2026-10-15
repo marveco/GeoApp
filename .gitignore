@@ -6,3 +6,5 @@ session_log.json
 __pycache__/
 .venv/
 .agents/
+backend_shim.py
+app_v1.py
