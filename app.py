@@ -303,22 +303,22 @@ vector_store = load_vector_store()
 # GRAPH NODES
 # ---------------------------------------------------------------------------
 
-def decomposer_node(state: AgentState):
-    # Grab the most recent user request
-    user_query = state["messages"][-1].content
+# def decomposer_node(state: AgentState):
+#     # Grab the most recent user request
+#     user_query = state["messages"][-1].content
     
-    prompt = f"""You are a Geospatial Architect. Break down the user's request into explicit, programmatic subtasks.
-    User Request: {user_query}
+#     prompt = f"""You are a Geospatial Architect. Break down the user's request into explicit, programmatic subtasks.
+#     User Request: {user_query}
     
-    Respond with a numbered list of steps required to achieve this in Python. Do not write code."""
+#     Respond with a numbered list of steps required to achieve this in Python. Do not write code."""
     
-    # Ask the LLM to think through the problem
-    response = llm.invoke([HumanMessage(content=prompt)])
+#     # Ask the LLM to think through the problem
+#     response = llm.invoke([HumanMessage(content=prompt)])
     
-    # Parse the text into a clean list of steps
-    subtasks = [line for line in response.content.split('\n') if line.strip()]
+#     # Parse the text into a clean list of steps
+#     subtasks = [line for line in response.content.split('\n') if line.strip()]
     
-    return {"subtasks": subtasks}
+#     return {"subtasks": subtasks}
 
 
 # def retriever_node(state: AgentState):
@@ -358,78 +358,81 @@ def retriever_node(state: AgentState):
 #PLAN:
 #    {chr(10).join(state.get("subtasks", []))}
 
-def agent_node(state):
+def agent_node(state: AgentState):
     messages = state["messages"]
 
-    error_context = ""
-    last_msg = messages[-1]
-    if hasattr(last_msg, "name") and last_msg.name in ["error", "refiner_error"]:
-        error_context = (
-            f"\n\nYOUR PREVIOUS CODE FAILED WITH:\n{last_msg.content}"
-            "\nPlease fix the python code."
-        )
-
     system_prompt = f"""
-    You are a strictly specialised Geospatial Python Analyst.
+    You are a specialized Geospatial Python Analyst.
 
     DATA CONTEXT:
     {data_summary}
 
-    RETRIEVED CODE EXAMPLES (Use ONLY for syntax logic, DO NOT copy file names or save calls):
+    RETRIEVED CODE REFERENCE (Use strictly for syntax guidance, DO NOT copy file names or dataset references):
     {state.get("code_context", "None available.")}
 
     TASK:
-    Create a geographic map in Python based on the user request. If the user asks for a non-map visualization (e.g., bar chart, pie chart), politely refuse and do not generate code.
+    Generate a Python script to create a geospatial map based on the user request.
 
-    TARGETED (QUERY-SCOPED) DATA CLEANING RULES:
-    1. IDENTIFY ACTIVE COLUMNS: Determine ONLY the specific columns needed for the current request (e.g., Latitude, Longitude, and the specific attribute column like 'period_of_day').
-    2. SANITIZE SPATIAL DATA: Convert ONLY the active latitude/longitude columns using `pd.to_numeric(df[col], errors='coerce')` and filter out rows where coordinates are NaN or zero.
-    3. SANITIZE ACTIVE ATTRIBUTE COLUMNS ONLY:
-       - For active numeric/sorting columns: Convert using `pd.to_numeric(..., errors='coerce')` and filter out NaNs with 'df.dropna' for THAT column only.
-       - For active categorical/color columns: Fill NaNs in THAT column with 'Unknown' or filter missing values for THAT column only.
-    4. NO GLOBAL DROPPING: NEVER use `df.dropna()` across the whole DataFrame, and NEVER drop rows based on columns not requested by the user. Preserve as much data as possible.
+    REASONING WORKFLOW (Follow these steps internally):
+    1. Identify active columns required for latitude, longitude, and visual attributes.
+    2. Formulate data cleaning strategy using `pd.to_numeric(..., errors='coerce')` for active numeric/spatial columns.
+    3. Select appropriate mapping framework (Folium, Plotly, GeoPandas, OSMnx).
+    4. Save final visual map to 'map.html'.
 
-    STRICT RULES:
-    1. SCOPE: ONLY generate geographic maps (using libraries like folium, plotly, geopandas, cartopy, osmnx, basemap, keplergl or ipyleaflet).
-    2. DATA: Always load data from '{DATA_FILE_PATH}'.
-    3. OUTPUT FILE: ALWAYS save the map EXACTLY as 'map.html'.
-    4. FORMAT: Provide only a short explanation and the ```python ... ``` code block.{error_context}
+    STRICT DATA RULES:
+    1. Load data from '{DATA_FILE_PATH}'.
+    2. SANITIZE ACTIVE COLUMNS ONLY: Filter NaNs only on columns used in the plot. NEVER call global `df.dropna()`.
+    3. ENVIRONMENT: DO NOT use Google Colab modules (`google.colab`), Earth Engine (`ee`), or interactive Jupyter widgets (`ipywidgets`).
+    4. OUTPUT FILE: Save the output file EXACTLY as 'map.html' (e.g., `m.save('map.html')` or `fig.write_html('map.html')`).
+    5. FORMAT: Provide a short summary followed by the Python code inside ```python ... ``` block.
     """
 
     msgs_for_llm = [SystemMessage(content=system_prompt)]
     for m in messages:
-        if m.type in ["human", "ai"] and (
-            not hasattr(m, "name") or m.name not in ["error", "refiner_error"]
-        ):
+        if m.type in ["human", "ai"] and (not hasattr(m, "name") or m.name not in ["error", "refiner_error"]):
             msgs_for_llm.append(m)
 
     response = llm.invoke(msgs_for_llm)
     return {"messages": [response]}
 
 
-def refiner_node(state):
-    last_message = state["messages"][-1]
+def refiner_node(state: AgentState):
+    messages = state["messages"]
+    last_msg = messages[-1]
 
-    code_match = re.search(r"```python(.*?)```", last_message.content, re.DOTALL)
-    if not code_match:
-        # No code block — polite refusal or other text; let it flow to END
+    # Retrieve execution error trace
+    error_details = last_msg.content if (hasattr(last_msg, "name") and last_msg.name == "error") else "Code execution failed."
+
+    # Search backward for the most recent AI generated code draft
+    draft_code = ""
+    for msg in reversed(messages):
+        if msg.type == "ai" and "```python" in msg.content:
+            code_match = re.search(r"```python(.*?)```", msg.content, re.DOTALL)
+            if code_match:
+                draft_code = code_match.group(1).strip()
+                break
+
+    if not draft_code:
         return {"messages": []}
 
-    draft_code = code_match.group(1).strip()
-
     review_prompt = f"""
-    You are a Senior Geospatial Code Reviewer. Check this code draft:
+    You are a Senior Geospatial Code Reviewer. The following Python code failed during execution:
+
     ```python
     {draft_code}
-    ```
-    CRITICAL CHECKLIST:
-    1. TARGETED CLEANING: Did it clean/filter ONLY the columns involved in the current request (e.g., active coordinates and active attribute columns)?
-    2. NO GLOBAL LOSS: Did it avoid global `df.dropna()` or dropping rows based on unused columns?
-    3. OUTPUT FILE: Ensure the map is saved EXACTLY as 'map.html' (replace plt.show(), .show(), or any other output filenames).
-    4. DATA INTEGRITY: Ensure it loads '{DATA_FILE_PATH}' and uses the exact column names from the summary.
-    5. QUERY & SYNTAX: Ensure filters match the user query and fix all syntax or execution errors.
-    
-    Return ONLY the improved code wrapped in ```python ... ```. Do not explain.
+    RUNTIME ERROR TRACEBACK:
+    {error_details}
+
+    DATA FILE: '{DATA_FILE_PATH}'
+
+    REPAIR CHECKLIST:
+    1. Fix the runtime syntax/logic error reported in the traceback.
+    2. Ensure data is loaded from '{DATA_FILE_PATH}'.
+    3. Apply column sanitization ONLY on columns used in the map (pd.to_numeric(..., errors='coerce')).
+    4. Ensure the output map is saved EXACTLY as 'map.html'.
+    5. DO NOT use Colab libraries or Jupyter widget displays.
+
+    Return ONLY the corrected code wrapped in python ... .
     """
     review_response = llm.invoke([HumanMessage(content=review_prompt)])
 
@@ -437,7 +440,7 @@ def refiner_node(state):
     if refined_match:
         refined_code = refined_match.group(1).strip()
         new_msg = AIMessage(
-            content=f"Here is the code for your map:\n```python\n{refined_code}\n```"
+            content=f"Here is the revised code:\n```python\n{refined_code}\n```"
         )
         return {"messages": [new_msg]}
 
