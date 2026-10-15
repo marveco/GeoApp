@@ -8,3 +8,5 @@ __pycache__/
 .agents/
 backend_shim.py
 app_v1.py
+clean_vector_db.py
+map_code_repository_01.json
