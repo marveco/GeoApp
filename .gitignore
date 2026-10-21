@@ -9,4 +9,4 @@ __pycache__/
 backend_shim.py
 app_v*
 clean_vector_db.py
-map_code_repository_01.json
+map_code_repository_*

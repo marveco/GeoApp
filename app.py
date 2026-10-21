@@ -364,14 +364,6 @@ def retriever_node(state: AgentState):
 def agent_node(state):
     messages = state["messages"]
 
-    error_context = ""
-    last_msg = messages[-1]
-    if hasattr(last_msg, "name") and last_msg.name in ["error", "refiner_error"]:
-        error_context = (
-            f"\n\nYOUR PREVIOUS CODE FAILED WITH:\n{last_msg.content}"
-            "\nPlease fix the python code."
-        )
-
     system_prompt = f"""
     You are a strictly specialised Geospatial Python Analyst.
 
@@ -383,28 +375,30 @@ def agent_node(state):
 
     TASK:
     Create a geographic map in Python based on the user request. If the user asks for a non-map visualization (e.g., bar chart, pie chart), politely refuse and do not generate code.
+    
+    FOLIUM MAP CATEGORY RULES:
+    1. Points/Markers: Use `folium.Marker` or `folium.CircleMarker` (bind radius to a numeric column) for exact coordinates.
+    2. Clusters/Hotspots: Use `folium.plugins.MarkerCluster` by default for dense point distributions or hotspot requests.
+    3. Heatmaps: Use `folium.plugins.HeatMap` ONLY if the user explicitly types "heatmap".
+    4. Spatial Grids: Use the `h3` library to convert coordinates to hexagon IDs, then render as polygons.
 
     TARGETED (QUERY-SCOPED) DATA CLEANING RULES:
-    1. IDENTIFY ACTIVE COLUMNS: Determine ONLY the specific columns needed for the current request (e.g., Latitude, Longitude, and the specific attribute column like 'period_of_day').
-    2. SANITIZE SPATIAL DATA: Convert ONLY the active latitude/longitude columns using `pd.to_numeric(df[col], errors='coerce')` and filter out rows where coordinates are NaN or zero.
-    3. SANITIZE ACTIVE ATTRIBUTE COLUMNS ONLY:
-       - For active numeric/sorting columns: Convert using `pd.to_numeric(..., errors='coerce')` and filter out NaNs with 'df.dropna' for THAT column only.
-       - For active categorical/color columns: Fill NaNs in THAT column with 'Unknown' or filter missing values for THAT column only.
-    4. NO GLOBAL DROPPING: NEVER use `df.dropna()` across the whole DataFrame, and NEVER drop rows based on columns not requested by the user. Preserve as much data as possible.
+    1. IDENTIFY ACTIVE COLUMNS: Determine ONLY the specific columns needed.
+    2. SANITIZE SPATIAL DATA: Convert ONLY active lat/lon using `pd.to_numeric(df[col], errors='coerce')` and drop NaNs/zeros.
+    3. SANITIZE ACTIVE ATTRIBUTE COLUMNS ONLY: Filter missing values for active columns only.
+    4. NO GLOBAL DROPPING: NEVER use `df.dropna()` across the whole DataFrame.
 
     STRICT RULES:
-    1. SCOPE: ONLY generate geographic maps (using libraries like folium, plotly, geopandas, cartopy, osmnx, basemap, keplergl or ipyleaflet).
+    1. SCOPE: ONLY generate geographic maps.
     2. DATA: Always load data from '{DATA_FILE_PATH}'.
-    3. OUTPUT FILE: ALWAYS save the map EXACTLY as 'map.html'.
-    4. FORMAT: Provide only a short explanation and the ```python ... ``` code block.{error_context}
+    3. CONDITIONAL STYLING: If styling depends on data conditions (e.g., "southernmost 20", "highest values"), you must first create a new categorical column or boolean mask in Pandas to isolate those specific rows BEFORE building the Folium map.
+    4. OUTPUT FILE: ALWAYS save the map EXACTLY as 'map.html'.
+    5. FORMAT: Provide only a short explanation and the ```python ... ``` code block.
     """
 
-    msgs_for_llm = [SystemMessage(content=system_prompt)]
-    for m in messages:
-        if m.type in ["human", "ai"] and (
-            not hasattr(m, "name") or m.name not in ["error", "refiner_error"]
-        ):
-            msgs_for_llm.append(m)
+    # Pass all messages exactly as they are. The HumanMessage containing the error 
+    # will act as the most recent prompt instructing the LLM to fix the code.
+    msgs_for_llm = [SystemMessage(content=system_prompt)] + messages
 
     response = llm.invoke(msgs_for_llm)
     return {"messages": [response]}
@@ -428,6 +422,7 @@ def refiner_node(state):
     CRITICAL CHECKLIST:
     1. TARGETED CLEANING: Did it clean/filter ONLY the columns involved in the current request (e.g., active coordinates and active attribute columns)?
     2. NO GLOBAL LOSS: Did it avoid global `df.dropna()` or dropping rows based on unused columns?
+    3. CONDITIONAL STYLING: If it styling depends on data conditions (e.g., "southernmost 20", "highest values"), it must first create a new categorical column or boolean mask in Pandas to isolate those specific rows BEFORE building the Folium map.
     3. OUTPUT FILE: Ensure the map is saved EXACTLY as 'map.html' (replace plt.show(), .show(), or any other output filenames).
     4. DATA INTEGRITY: Ensure it loads '{DATA_FILE_PATH}' and uses the exact column names from the summary.
     5. QUERY & SYNTAX: Ensure filters match the user query and fix all syntax or execution errors.
@@ -482,8 +477,9 @@ def execute_node(state: AgentState):
         else:
             # Feed the actual Python error/traceback back to TableGPT2
             error_details = (
-                f"Execution Error: 'map.html' was not generated.\n"
-                f"Python REPL Output / Traceback:\n{execution_output}"
+                f"Your previous code failed to generate the map.\n"
+                f"Python Traceback:\n{execution_output}\n"
+                f"Please fix the error and provide the corrected python code."
             )
             return {
                 "messages": [HumanMessage(content=error_details, name="error")],
@@ -491,7 +487,7 @@ def execute_node(state: AgentState):
             }
     except Exception as e:
         return {
-            "messages": [HumanMessage(content=f"Execution Error: {e}", name="error")],
+            "messages": [HumanMessage(content=f"Your previous code threw an Exception: {e}\nPlease fix the python code.", name="error")],
             "retry_count": current_retries + 1
         }
 
