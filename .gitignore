@@ -7,6 +7,6 @@ __pycache__/
 .venv/
 .agents/
 backend_shim.py
-app_v*
+non_active_versions/
 clean_vector_db.py
 map_code_repository_*
