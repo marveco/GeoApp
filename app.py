@@ -376,11 +376,15 @@ def agent_node(state):
     TASK:
     Create a geographic map in Python based on the user request. If the user asks for a non-map visualization (e.g., bar chart, pie chart), politely refuse and do not generate code.
     
+    VAGUE REQUEST & PROXY MAPPING RULES:
+    1. PROXY INFERENCE: Users may ask for concepts not explicitly named in the columns (e.g., asking for "burned land area", "fire severity", or "most affected cities" when only point focus records exist). You MUST infer that frequency/count of points per category (e.g., city, region) serves as the proxy for these metrics.
+    2. AGGREGATION TO MAPS: When asked for "top N cities" or rankings, calculate the top N using Pandas (`value_counts()` or `groupby()`), filter the original DataFrame to keep ONLY those points/cities, and plot those points or their centroids on the Folium map.
+
     FOLIUM MAP CATEGORY RULES:
-    1. Points/Markers: Use `folium.Marker` or `folium.CircleMarker` (bind radius to a numeric column) for exact coordinates.
-    2. Clusters/Hotspots: Use `folium.plugins.MarkerCluster` by default for dense point distributions or hotspot requests.
-    3. Heatmaps: Use `folium.plugins.HeatMap` ONLY if the user explicitly types "heatmap".
-    4. Spatial Grids: Use the `h3` library to convert coordinates to hexagon IDs, then render as polygons.
+    1. Points/Markers: Use `folium.Marker` or `folium.CircleMarker`.
+    2. Clusters/Hotspots: Use `folium.plugins.MarkerCluster`.
+    3. Heatmaps: Use `folium.plugins.HeatMap` ONLY if explicitly requested.
+    4. Spatial Grids: Use `h3` library for hexagons.
 
     TARGETED (QUERY-SCOPED) DATA CLEANING RULES:
     1. IDENTIFY ACTIVE COLUMNS: Determine ONLY the specific columns needed.
@@ -394,6 +398,25 @@ def agent_node(state):
     3. CONDITIONAL STYLING: If styling depends on data conditions (e.g., "southernmost 20", "highest values"), you must first create a new categorical column or boolean mask in Pandas to isolate those specific rows BEFORE building the Folium map.
     4. OUTPUT FILE: ALWAYS save the map EXACTLY as 'map.html'.
     5. FORMAT: Provide only a short explanation and the ```python ... ``` code block.
+
+    PLANNING REQUIREMENT:
+    Before writing Python code, write a 2-sentence plan inside `#` comments explaining your data filtering, proxy mapping, and color/layer assignment strategy.
+
+    EXAMPLES:
+
+    # Example 1: Proxy & Ranking
+    # Plan: User asked for top 10 burned areas, but only point occurrences exist.
+    # Count occurrences per city, isolate top 10 cities, filter points, and plot them.
+    top_cities = df['city_column'].value_counts().head(10).index
+    df_filtered = df[df['city_column'].isin(top_cities)].copy()
+    # Build Folium map with df_filtered points...
+
+    # Example 2: Conditional Styling
+    # Plan: Isolate the 20 southernmost points by sorting latitude.
+    # Color them red and all others blue using a new DataFrame column.
+    bottom_20 = df.nsmallest(20, 'latitude')
+    df['marker_color'] = 'blue'
+    df.loc[bottom_20.index, 'marker_color'] = 'red'
     """
 
     # Pass all messages exactly as they are. The HumanMessage containing the error 
