@@ -393,8 +393,9 @@ def agent_node(state):
     1. SCOPE: ONLY generate geographic maps.
     2. DATA: Always load data from '{DATA_FILE_PATH}'.
     3. CONDITIONAL STYLING: If styling depends on data conditions (e.g., "southernmost 20", "highest values"), you must first create a new categorical column or boolean mask in Pandas to isolate those specific rows BEFORE building the Folium map.
-    4. OUTPUT FILE: ALWAYS save the map EXACTLY as 'map.html'.
-    5. FORMAT: Provide only a short explanation and the ```python ... ``` code block.
+    4. BASE TILES: ALWAYS use the default OpenStreetMap tiles (e.g., use `folium.Map(...)` without the `tiles` argument). NEVER use 'CartoDB positron' or any other tile sets.
+    5. OUTPUT FILE: ALWAYS save the map EXACTLY as 'map.html'.
+    6. FORMAT: Provide only a short explanation and the ```python ... ``` code block.
 
     PLANNING REQUIREMENT:
     Before writing Python code, write a 2-sentence plan inside `#` comments explaining your data filtering, proxy mapping, and color/layer assignment strategy.
