@@ -29,3 +29,7 @@ basemap
 basemap-data
 keplergl
 ipyleaflet
+
+# Supabase LOGS
+supabase
+

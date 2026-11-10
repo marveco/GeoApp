@@ -31,20 +31,17 @@ st.title("🌍 Geospatial Analyst (Self-Correcting)")
 
 
 # ---------------------------------------------------------------------------
-# LOGGING HELPER
+# LOGGING HELPER SUPABASE
 # ---------------------------------------------------------------------------
 def append_log(entry: dict):
-    """Append a structured log entry to session_log.json."""
-    logs = []
-    if os.path.exists(LOG_FILE):
-        try:
-            with open(LOG_FILE, "r", encoding="utf-8") as f:
-                logs = json.load(f)
-        except Exception:
-            logs = []
-    logs.append(entry)
-    with open(LOG_FILE, "w", encoding="utf-8") as f:
-        json.dump(logs, f, indent=2, ensure_ascii=False)
+    try:
+        url = st.secrets["SUPABASE_URL"]
+        key = st.secrets["SUPABASE_KEY"]
+        supabase = create_client(url, key)
+        # Wrap the entry in our JSONB column structure
+        supabase.table("session_logs").insert({"log_data": entry}).execute()
+    except Exception as e:
+        print(f"Logging failed: {e}")
 
 
 # ---------------------------------------------------------------------------
