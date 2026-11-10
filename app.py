@@ -44,7 +44,8 @@ def append_log(entry: dict):
         # Wrap the entry in our JSONB column structure
         supabase.table("session_logs").insert({"log_data": entry}).execute()
     except Exception as e:
-        print(f"Logging failed: {e}")
+        st.error(f"Supabase Error: {e}") # This will pop up on your screen!
+        # print(f"Logging failed: {e}")
 
 
 # ---------------------------------------------------------------------------
