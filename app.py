@@ -36,16 +36,21 @@ st.title("🌍 Geospatial Analyst (Self-Correcting)")
 # ---------------------------------------------------------------------------
 # LOGGING HELPER SUPABASE
 # ---------------------------------------------------------------------------
-def append_log(entry: dict):
+from supabase import create_client
+
+def append_log(log_entry: dict):
+    # log_entry is already the flat dictionary you showed me!
+    # Its keys perfectly match the SQL columns we just created.
     try:
         url = st.secrets["SUPABASE_URL"]
         key = st.secrets["SUPABASE_KEY"]
         supabase = create_client(url, key)
-        # Wrap the entry in our JSONB column structure
-        supabase.table("session_logs").insert({"log_data": entry}).execute()
+        
+        # Insert the dictionary directly; Supabase will map the keys to the columns
+        supabase.table("session_logs").insert(log_entry).execute()
     except Exception as e:
-        st.error(f"Supabase Error: {e}") # This will pop up on your screen!
-        # print(f"Logging failed: {e}")
+        import streamlit as st
+        st.error(f"Supabase Error: {e}")
 
 
 # ---------------------------------------------------------------------------
