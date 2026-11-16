@@ -36,7 +36,6 @@ st.title("🌍 Geospatial Analyst (Self-Correcting)")
 # ---------------------------------------------------------------------------
 # LOGGING HELPER SUPABASE
 # ---------------------------------------------------------------------------
-from supabase import create_client
 
 def append_log(log_entry: dict):
     # log_entry is already the flat dictionary you showed me!
@@ -49,7 +48,6 @@ def append_log(log_entry: dict):
         # Insert the dictionary directly; Supabase will map the keys to the columns
         supabase.table("session_logs").insert(log_entry).execute()
     except Exception as e:
-        import streamlit as st
         st.error(f"Supabase Error: {e}")
 
 
