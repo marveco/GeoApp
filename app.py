@@ -81,6 +81,9 @@ def _ensure_state():
             st.session_state["active_conv_id"] = list(convs.keys())[-1]
         else:
             _new_conversation()
+    # NEW: Track the last uploaded file to avoid duplicate welcome messages
+    if "last_uploaded_file" not in st.session_state:
+        st.session_state["last_uploaded_file"] = None
 
 
 _ensure_state()
@@ -122,22 +125,8 @@ with st.sidebar:
 
     if uploaded_file is not None:
         try:
-            # OLD CODE (Fails in Pandas 3.0+)
-            # df = pd.read_csv(uploaded_file)
-            # object_cols = df.select_dtypes(include=["object"]).columns
-            # df[object_cols] = df[object_cols].astype(str)
-            # df.fillna(0, inplace=True)
-
-            # NEW CODE (Compatible with Pandas 3.0+)
             df = pd.read_csv(uploaded_file)
 
-            # # Fill numeric NaNs with 0
-            # num_cols = df.select_dtypes(include=["number"]).columns
-            # df[num_cols] = df[num_cols].fillna(0)
-
-            # # Fill text/object NaNs with empty string and cast to str
-            # non_num_cols = df.select_dtypes(exclude=["number"]).columns
-            # df[non_num_cols] = df[non_num_cols].fillna("").astype(str)
             df.to_csv(DATA_FILE_PATH, index=False)
             st.success(f"Loaded {len(df)} rows")
 
@@ -165,6 +154,40 @@ with st.sidebar:
             data_summary = "\n".join(buffer)
             with st.expander("LLM View"):
                 st.text(data_summary)
+
+            # --- User-Facing Welcome Message (runs once per new file) ---
+            if st.session_state.get("last_uploaded_file") != uploaded_file.name:
+                st.session_state["last_uploaded_file"] = uploaded_file.name
+
+                md_table = "| Column Name | Data Type | Example Values |\n|---|---|---|\n"
+                for col in df.columns:
+                    readable_type = (
+                        "Numeric"
+                        if pd.api.types.is_numeric_dtype(df[col])
+                        else "Text/Categorical"
+                    )
+                    samples = df[col].dropna().astype(str).unique()[:3]
+                    sample_str = (
+                        ", ".join(samples).replace("|", "\\|").replace("\n", " ")
+                        if len(samples) > 0
+                        else "N/A"
+                    )
+                    md_table += f"| **{col}** | {readable_type} | {sample_str} |\n"
+
+                welcome_msg = (
+                    f"👋 **Hello! Thanks for using the Geospatial Analyst.**\n\n"
+                    f"I've successfully loaded your dataset (`{uploaded_file.name}`) containing **{len(df)} rows**. "
+                    f"To help me build the most accurate map, please base your requests on the columns available below:\n\n"
+                    f"{md_table}\n\n"
+                    f"**What kind of map would you like to build?**"
+                )
+
+                active_id = st.session_state["active_conv_id"]
+                st.session_state["conversations"][active_id]["history"].append(
+                    {"role": "assistant", "content": welcome_msg}
+                )
+                st.rerun()
+
         except Exception as e:
             st.error(f"Error: {e}")
 
@@ -505,7 +528,7 @@ def execute_node(state: AgentState):
                 "retry_count": 0  # Reset on success
             }
         else:
-            # Feed the actual Python error/traceback back to TableGPT2
+            # Feed the actual Python error/traceback back to TableGPT-R1
             error_details = (
                 f"Your previous code failed to generate the map.\n"
                 f"Python Traceback:\n{execution_output}\n"
