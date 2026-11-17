@@ -400,9 +400,10 @@ def agent_node(state):
     1. SCOPE: ONLY generate geographic maps.
     2. DATA: Always load data from '{DATA_FILE_PATH}'.
     3. CONDITIONAL STYLING: If styling depends on data conditions (e.g., "southernmost 20", "highest values"), you must first create a new categorical column or boolean mask in Pandas to isolate those specific rows BEFORE building the Folium map.
-    4. BASE TILES: ALWAYS use the default OpenStreetMap tiles (e.g., use `folium.Map(...)` without the `tiles` argument). NEVER use 'CartoDB positron' or any other tile sets.
-    5. OUTPUT FILE: ALWAYS save the map EXACTLY as 'map.html'.
-    6. FORMAT: Provide only a short explanation and the ```python ... ``` code block.
+    4. COLOR GRADIENTS: For continuous color gradients (e.g., oldest to most recent, low to high), use `import branca.colormap as cm` with `cm.LinearColormap` and `folium.CircleMarker`. Convert datetime columns to numeric values (such as elapsed days) before passing them to the colormap, and attach the legend with `m.add_child(colormap)`.
+    5. BASE TILES: ALWAYS use the default OpenStreetMap tiles (e.g., use `folium.Map(...)` without the `tiles` argument). NEVER use 'CartoDB positron' or any other tile sets.
+    6. OUTPUT FILE: ALWAYS save the map EXACTLY as 'map.html'.
+    7. FORMAT: Provide only a short explanation and the ```python ... ``` code block.
 
     PLANNING REQUIREMENT:
     Before writing Python code, write a 2-sentence plan inside `#` comments explaining your data filtering, proxy mapping, and color/layer assignment strategy.
@@ -422,6 +423,29 @@ def agent_node(state):
     bottom_20 = df.nsmallest(20, 'latitude')
     df['marker_color'] = 'blue'
     df.loc[bottom_20.index, 'marker_color'] = 'red'
+
+    # Example 3: Continuous Datetime Color Gradient
+    # Plan: Parse the date column and convert it to numeric elapsed days from the oldest record.
+    # Apply a yellow-to-red LinearColormap to CircleMarkers and attach the legend.
+    import branca.colormap as cm
+    df['dt'] = pd.to_datetime(df['date_column'], errors='coerce')
+    df = df.dropna(subset=['latitude', 'longitude', 'dt']).copy()
+    df['days'] = (df['dt'] - df['dt'].min()).dt.total_seconds() / 86400.0
+    colormap = cm.LinearColormap(colors=['yellow', 'orange', 'red'], vmin=df['days'].min(), vmax=df['days'].max())
+    colormap.caption = 'Days Since Oldest Record'
+    m = folium.Map(location=[df['latitude'].mean(), df['longitude'].mean()], zoom_start=6)
+    for _, row in df.iterrows():
+        cor = colormap(row['days'])
+        folium.CircleMarker(
+            location=[row['latitude'], row['longitude']],
+            radius=6,
+            color=cor,
+            fill=True,
+            fill_color=cor,
+            fill_opacity=0.7
+        ).add_to(m)
+    m.add_child(colormap)
+    m.save('map.html')
     """
 
     # Pass all messages exactly as they are. The HumanMessage containing the error 
@@ -453,10 +477,10 @@ def refiner_node(state):
     CRITICAL CHECKLIST:
     1. TARGETED CLEANING: Did it clean/filter ONLY the columns involved in the current request (e.g., active coordinates and active attribute columns)?
     2. NO GLOBAL LOSS: Did it avoid global `df.dropna()` or dropping rows based on unused columns?
-    3. CONDITIONAL STYLING: If it styling depends on data conditions (e.g., "southernmost 20", "highest values"), it must first create a new categorical column or boolean mask in Pandas to isolate those specific rows BEFORE building the Folium map.
-    3. OUTPUT FILE: Ensure the map is saved EXACTLY as 'map.html' (replace plt.show(), .show(), or any other output filenames).
-    4. DATA INTEGRITY: Ensure it loads '{DATA_FILE_PATH}' and uses the exact column names from the summary.
-    5. QUERY & SYNTAX: Ensure filters match the user query and fix all syntax or execution errors.
+    3. STYLING & GRADIENTS: For discrete conditions, ensure it uses a categorical column or boolean mask; for continuous gradients (e.g., oldest to newest), ensure it uses `branca.colormap.LinearColormap` on numeric values and attaches the legend via `m.add_child(colormap)`.
+    4. OUTPUT FILE: Ensure the map is saved EXACTLY as 'map.html' (replace plt.show(), .show(), or any other output filenames).
+    5. DATA INTEGRITY: Ensure it loads '{DATA_FILE_PATH}' and uses the exact column names from the summary.
+    6. QUERY & SYNTAX: Ensure filters match the user query and fix all syntax or execution errors.
     
     Return ONLY the improved code wrapped in ```python ... ```. Do not explain.
     """
