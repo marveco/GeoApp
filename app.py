@@ -7,6 +7,7 @@ import time
 import json
 import uuid
 import operator
+import traceback
 from datetime import datetime
 from typing import Annotated, TypedDict, List
 from langgraph.graph import StateGraph, END
@@ -351,28 +352,6 @@ def decomposer_node(state: AgentState):
     return {"subtasks": subtasks}
 
 
-# def retriever_node(state: AgentState):
-#     if vector_store is None:
-#         return {"code_context": "No retrieved context available."}
-
-#     user_query = state["messages"][-1].content
-#     subtasks_str = " ".join(state.get("subtasks", []))
-    
-#     # Combine query and subtasks to form a highly specific search string
-#     search_query = f"{user_query} {subtasks_str}"
-    
-#     # Retrieve the top 2 closest matches
-#     matched_docs = vector_store.similarity_search(search_query, k=2)
-    
-#     # Format the retrieved code into a single context string to feed the Agent
-#     context_blocks = []
-#     for i, doc in enumerate(matched_docs):
-#         context_blocks.append(f"--- Example {i+1} ---\n{doc.metadata['code']}")
-        
-#     code_context = "\n\n".join(context_blocks)
-    
-#     return {"code_context": code_context}
-
 def retriever_node(state: AgentState):
     if vector_store is None:
         return {"code_context": "No context available."}
@@ -385,8 +364,6 @@ def retriever_node(state: AgentState):
     code_context = matched_docs[0].metadata.get("code", "") if matched_docs else ""
     return {"code_context": code_context}
 
-#PLAN:
-#    {chr(10).join(state.get("subtasks", []))}
 
 def agent_node(state):
     messages = state["messages"]
@@ -470,6 +447,9 @@ def refiner_node(state):
     ```python
     {draft_code}
     ```
+    DATA SUMMARY:
+    {data_summary}
+
     CRITICAL CHECKLIST:
     1. TARGETED CLEANING: Did it clean/filter ONLY the columns involved in the current request (e.g., active coordinates and active attribute columns)?
     2. NO GLOBAL LOSS: Did it avoid global `df.dropna()` or dropping rows based on unused columns?
@@ -514,8 +494,7 @@ def execute_node(state: AgentState):
         os.remove("map.html")
 
     try:
-        # repl.run returns stdout/stderr/traceback as a string
-        execution_output = repl.run(code_to_run)
+        exec(code_to_run, {})
 
         if os.path.exists("map.html"):
             timestamp = int(time.time())
@@ -523,22 +502,26 @@ def execute_node(state: AgentState):
             os.rename("map.html", unique_html)
             return {
                 "messages": [HumanMessage(content=f"[HTML_READY:{unique_html}]", name="tool_success")],
-                "retry_count": 0  # Reset on success
+                "retry_count": 0
             }
         else:
-            # Feed the actual Python error/traceback back to TableGPT-R1
             error_details = (
-                f"Your previous code failed to generate the map.\n"
-                f"Python Traceback:\n{execution_output}\n"
-                f"Please fix the error and provide the corrected python code."
+                "Your previous code ran without errors, but did not create 'map.html'. "
+                "Ensure the map is saved using m.save('map.html')."
             )
             return {
                 "messages": [HumanMessage(content=error_details, name="error")],
                 "retry_count": current_retries + 1
             }
-    except Exception as e:
+    except Exception:
+        tb = traceback.format_exc()
+        error_details = (
+            f"Your previous code failed to generate the map.\n"
+            f"Python Traceback:\n{tb}\n"
+            f"Please fix the error and provide the corrected python code."
+        )
         return {
-            "messages": [HumanMessage(content=f"Your previous code threw an Exception: {e}\nPlease fix the python code.", name="error")],
+            "messages": [HumanMessage(content=error_details, name="error")],
             "retry_count": current_retries + 1
         }
 
@@ -616,11 +599,14 @@ if prompt := st.chat_input("Ask for a geographic map..."):
 
     # ── Build clean LLM message history (no [HTML_READY] tags) ─────────────
     llm_messages: List[BaseMessage] = []
+    uploaded_name = uploaded_file.name if uploaded_file is not None else None
     for turn in chat_history:
         if turn["role"] == "user":
             llm_messages.append(HumanMessage(content=turn["content"]))
         else:
             clean = re.sub(r"\[HTML_READY:.*?\]", "", turn["content"])
+            if uploaded_name:
+                clean = clean.replace(uploaded_name, DATA_FILE_PATH)
             llm_messages.append(AIMessage(content=clean.strip()))
 
     inputs = {"messages": llm_messages, "retry_count": 0}
