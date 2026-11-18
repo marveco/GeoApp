@@ -27,7 +27,7 @@ from supabase import create_client
 # ---------------------------------------------------------------------------
 CLUSTER_URL    = st.secrets.get("CLUSTER_URL")
 MODEL_NAME     = st.secrets.get("MODEL_NAME")
-DATA_FILE_PATH = "current_data.csv"
+#DATA_FILE_PATH = "current_data.csv"
 LOG_FILE       = "session_log.json"
 
 st.set_page_config(page_title="Geo-Data Analyst", page_icon="🌍", layout="wide")
@@ -71,6 +71,10 @@ def _new_conversation():
 
 def _ensure_state():
     """Initialise session-state keys on the very first run."""
+    if "user_session_id" not in st.session_state:
+        st.session_state["user_session_id"] = str(uuid.uuid4())[:8]
+    if "participant_id" not in st.session_state:
+        st.session_state["participant_id"] = st.query_params.get("pid", "")
     if "conversations" not in st.session_state:
         st.session_state["conversations"] = {}
         _new_conversation()
@@ -80,12 +84,14 @@ def _ensure_state():
             st.session_state["active_conv_id"] = list(convs.keys())[-1]
         else:
             _new_conversation()
-    # NEW: Track the last uploaded file to avoid duplicate welcome messages
     if "last_uploaded_file" not in st.session_state:
         st.session_state["last_uploaded_file"] = None
 
-
 _ensure_state()
+
+USER_SESSION_ID = st.session_state["user_session_id"]
+DATA_FILE_PATH  = f"data_{USER_SESSION_ID}.csv"
+MAP_FILE_PATH   = f"map_{USER_SESSION_ID}.html"
 
 
 def _init_rename_state():
@@ -116,6 +122,11 @@ _init_rename_state()
 # SIDEBAR — Data Centre + Conversation Manager
 # ---------------------------------------------------------------------------
 with st.sidebar:
+    st.text_input(
+        "Participant ID",
+        key="participant_id",
+        placeholder="e.g., P01 (optional)",
+    )
 
     # ── Data Centre ─────────────────────────────────────────────────────────
     st.header("📂 Data Centre")
@@ -402,7 +413,7 @@ def agent_node(state):
     3. CONDITIONAL STYLING: If styling depends on data conditions (e.g., "southernmost 20", "highest values"), you must first create a new categorical column or boolean mask in Pandas to isolate those specific rows BEFORE building the Folium map.
     4. COLOR GRADIENTS: For continuous color gradients (e.g., oldest to most recent, low to high), use `import branca.colormap as cm` with `cm.LinearColormap` and `folium.CircleMarker`. Convert datetime columns to numeric values (such as elapsed days) before passing them to the colormap, and attach the legend with `m.add_child(colormap)`. ONLY add a colormap if the user asks for different colors in the visualization.
     5. BASE TILES: ALWAYS use the default OpenStreetMap tiles (e.g., use `folium.Map(...)` without the `tiles` argument). NEVER use 'CartoDB positron' or any other tile sets.
-    6. OUTPUT FILE: ALWAYS save the map EXACTLY as 'map.html'.
+    6. OUTPUT FILE: ALWAYS save the map EXACTLY as '{MAP_FILE_PATH}'.
     7. FORMAT: Provide only a short explanation and the ```python ... ``` code block.
 
     PLANNING REQUIREMENT:
@@ -445,7 +456,7 @@ def agent_node(state):
             fill_opacity=0.7
         ).add_to(m)
     m.add_child(colormap)
-    m.save('map.html')
+    m.save('{MAP_FILE_PATH}')
     """
 
     # Pass all messages exactly as they are. The HumanMessage containing the error 
@@ -478,7 +489,7 @@ def refiner_node(state):
     1. TARGETED CLEANING: Did it clean/filter ONLY the columns involved in the current request (e.g., active coordinates and active attribute columns)?
     2. NO GLOBAL LOSS: Did it avoid global `df.dropna()` or dropping rows based on unused columns?
     3. STYLING & GRADIENTS: For discrete conditions, ensure it uses a categorical column or boolean mask; for continuous gradients (e.g., oldest to newest), ensure it uses `branca.colormap.LinearColormap` on numeric values and attaches the legend via `m.add_child(colormap)`, ensure the colormap is only used if it is necessary (different colors visualization).
-    4. OUTPUT FILE: Ensure the map is saved EXACTLY as 'map.html' (replace plt.show(), .show(), or any other output filenames).
+    4. OUTPUT FILE: Ensure the map is saved EXACTLY as '{MAP_FILE_PATH}' (replace plt.show(), .show(), or any other output filenames).
     5. DATA INTEGRITY: Ensure it loads '{DATA_FILE_PATH}' and uses the exact column names from the summary.
     6. QUERY & SYNTAX: Ensure filters match the user query and fix all syntax or execution errors.
     
@@ -514,24 +525,24 @@ def execute_node(state: AgentState):
             "retry_count": current_retries + 1
         }
 
-    if os.path.exists("map.html"):
-        os.remove("map.html")
+    if os.path.exists(MAP_FILE_PATH):
+        os.remove(MAP_FILE_PATH)
 
     try:
         exec(code_to_run, {})
 
-        if os.path.exists("map.html"):
+        if os.path.exists(MAP_FILE_PATH):
             timestamp = int(time.time())
             unique_html = f"map_{timestamp}.html"
-            os.rename("map.html", unique_html)
+            os.rename(MAP_FILE_PATH, unique_html)
             return {
                 "messages": [HumanMessage(content=f"[HTML_READY:{unique_html}]", name="tool_success")],
                 "retry_count": 0
             }
         else:
             error_details = (
-                "Your previous code ran without errors, but did not create 'map.html'. "
-                "Ensure the map is saved using m.save('map.html')."
+                "Your previous code ran without errors, but did not create '{MAP_FILE_PATH}'. "
+                "Ensure the map is saved using m.save('{MAP_FILE_PATH}')."
             )
             return {
                 "messages": [HumanMessage(content=error_details, name="error")],
@@ -727,14 +738,16 @@ if prompt := st.chat_input("Ask for a geographic map..."):
 
     # ── Write system log entry ─────────────────────────────────────────────
     log_entry = {
-        "timestamp":              datetime.now().isoformat(timespec="seconds"),
-        "conversation_id":        active_conv_id,
-        "conversation_name":      st.session_state["conversations"][active_conv_id]["name"],
-        "prompt":                 prompt,
-        "generated_code":         metrics["generated_code"],
-        "refinement_activations": metrics["refinement_activations"],
-        "code_execution_errors":  metrics["code_execution_errors"],
-        "system_errors":          metrics["system_errors"],
-        "response_time_seconds":  response_time,
+    "timestamp":              datetime.now().isoformat(timespec="seconds"),
+    "user_session_id":        USER_SESSION_ID,
+    "participant_id":         st.session_state.get("participant_id") or "anonymous",
+    "conversation_id":        active_conv_id,
+    "conversation_name":      st.session_state["conversations"][active_conv_id]["name"],
+    "prompt":                 prompt,
+    "generated_code":         metrics["generated_code"],
+    "refinement_activations": metrics["refinement_activations"],
+    "code_execution_errors":  metrics["code_execution_errors"],
+    "system_errors":          metrics["system_errors"],
+    "response_time_seconds":  response_time,
     }
     append_log(log_entry)
