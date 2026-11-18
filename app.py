@@ -466,7 +466,7 @@ def agent_node(state):
     # Plot points with folium.Marker using those named colors and add a matching HTML legend.
     valid_colors = ['orange', 'darkblue', 'green', 'purple', 'cadetblue', 'darkred', 'darkgreen']
     categories = sorted(df['period_column'].dropna().unique())
-    color_map = {cat: valid_colors[i % len(valid_colors)] for i, cat in enumerate(categories)}
+    color_map = {{cat: valid_colors[i % len(valid_colors)] for i, cat in enumerate(categories)}}
     m = folium.Map(location=[df['latitude'].mean(), df['longitude'].mean()], zoom_start=6)
     for _, row in df.iterrows():
         c = color_map.get(row['period_column'], 'blue')
