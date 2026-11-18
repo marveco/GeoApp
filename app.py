@@ -396,8 +396,8 @@ def agent_node(state):
     2. AGGREGATION TO MAPS: When asked for "top N cities" or rankings, calculate the top N using Pandas (`value_counts()` or `groupby()`), filter the original DataFrame to keep ONLY those points/cities, and plot those points or their centroids on the Folium map.
 
     FOLIUM MAP CATEGORY RULES:
-    1. Points/Markers: Use `folium.Marker` or `folium.CircleMarker`.
-    2. Clusters/Hotspots: Use `folium.plugins.MarkerCluster`.
+    1. Points/Spots (DEFAULT): Plot individual points using `folium.CircleMarker` or `folium.Marker` (even if retrieved examples use clusters).
+    2. Clusters/Hotspots: 2. Clusters: Use `folium.plugins.MarkerCluster` ONLY if the user explicitly asks for "clusters", "hotspots" or "clustered" points.
     3. Heatmaps: Use `folium.plugins.HeatMap` ONLY if explicitly requested.
     4. Spatial Grids: Use `h3` library for hexagons.
 
@@ -411,7 +411,9 @@ def agent_node(state):
     1. SCOPE: ONLY generate geographic maps.
     2. DATA: Always load data from '{DATA_FILE_PATH}'.
     3. CONDITIONAL STYLING: If styling depends on data conditions (e.g., "southernmost 20", "highest values"), you must first create a new categorical column or boolean mask in Pandas to isolate those specific rows BEFORE building the Folium map.
-    4. COLORS: Use `branca.colormap.LinearColormap` (with `folium.CircleMarker` and `m.add_child(colormap)`) ONLY for continuous numeric gradients/scales. For discrete categories (e.g., period, biome, class), DO NOT use `branca.colormap`—map categories to standard Folium color names (`'blue'`, `'orange'`, `'green'`, `'purple'`, `'darkred'`, `'darkblue'`, `'darkgreen'`).
+    4. COLORS:
+        - Continuous gradients (e.g., oldest to newest, low to high): Use `branca.colormap.LinearColormap` on a numeric column, use `folium.CircleMarker` (NEVER `folium.Marker`), pass `c = colormap(val)` into BOTH `color=c` and `fill_color=c` (with `fill=True`), and attach `m.add_child(colormap)`.
+        - Discrete categories (e.g., period, biome, class): DO NOT use `branca.colormap`—map categories to standard Folium color names (`'blue'`, `'orange'`, `'green'`, `'purple'`, `'darkred'`, `'darkblue'`, `'darkgreen'`).
     5. BASE TILES: ALWAYS use the default OpenStreetMap tiles (e.g., use `folium.Map(...)` without the `tiles` argument). NEVER use 'CartoDB positron' or any other tile sets.
     6. OUTPUT FILE: ALWAYS save the map EXACTLY as '{MAP_FILE_PATH}'.
     7. FORMAT: Provide only a short explanation and the ```python ... ``` code block.
@@ -488,10 +490,10 @@ def refiner_node(state):
     CRITICAL CHECKLIST:
     1. TARGETED CLEANING: Did it clean/filter ONLY the columns involved in the current request (e.g., active coordinates and active attribute columns)?
     2. NO GLOBAL LOSS: Did it avoid global `df.dropna()` or dropping rows based on unused columns?
-    3. STYLING & COLORS: Use `branca.colormap.LinearColormap` ONLY for continuous numeric gradients; for discrete categories, use standard Folium color names (never hex codes or `branca.colormap`).
+    3. STYLING & COLORS: For continuous gradients, verify that `c = colormap(numeric_val)` is actually passed into `folium.CircleMarker(color=c, fill=True, fill_color=c)` (NEVER `folium.Marker`) alongside `m.add_child(colormap)`. For discrete categories, DO NOT use `branca.colormap`—use standard Folium color names.
     4. OUTPUT FILE: Ensure the map is saved EXACTLY as '{MAP_FILE_PATH}' (replace plt.show(), .show(), or any other output filenames).
     5. DATA INTEGRITY: Ensure it loads '{DATA_FILE_PATH}' and uses the exact column names from the summary.
-    6. QUERY & SYNTAX: Ensure filters match the user query and fix all syntax or execution errors.
+    6. MAP TYPE & SYNTAX: Replace `MarkerCluster` or `HeatMap` with individual `CircleMarker`/`Marker` unless the user explicitly asked for clusters/heatmaps, ensure filters match the query, and fix all syntax or execution errors.
     
     Return ONLY the improved code wrapped in ```python ... ```. Do not explain.
     """
