@@ -411,10 +411,7 @@ def agent_node(state):
     1. SCOPE: ONLY generate geographic maps.
     2. DATA: Always load data from '{DATA_FILE_PATH}'.
     3. CONDITIONAL STYLING: If styling depends on data conditions (e.g., "southernmost 20", "highest values"), you must first create a new categorical column or boolean mask in Pandas to isolate those specific rows BEFORE building the Folium map.
-    4. COLOR STYLING (CATEGORICAL VS. GRADIENT):
-        - Default: If the user does NOT ask for different colors or a color scale, use a single default color and DO NOT import `branca.colormap`.
-        - Categorical colors (e.g., period of day, biome, state, class): DO NOT use `branca.colormap`. Map each unique category with a Python dictionary using ONLY Folium's supported named colors: ['blue', 'orange', 'green', 'purple', 'darkred', 'darkblue', 'darkgreen', 'cadetblue', 'darkpurple', 'pink', 'lightblue', 'lightgreen', 'gray', 'black']. Pass the named color to `icon=folium.Icon(color=...)` (with `folium.Marker`) or `color=`/`fill_color=` (with `folium.CircleMarker`), and add a small HTML legend using `m.get_root().html.add_child(folium.Element(...))`.
-        - Continuous color gradients (ONLY when the user explicitly asks for a color gradient/scale or continuous numeric progression like oldest to most recent or low to high): Use `import branca.colormap as cm` with `cm.LinearColormap` and `folium.CircleMarker` (NEVER `folium.Marker` or `folium.Icon`, which do not accept hex codes). Convert datetime columns to numeric values (such as elapsed days) before passing them to the colormap, and attach the legend with `m.add_child(colormap)`.
+    4. COLORS: Use `branca.colormap.LinearColormap` (with `folium.CircleMarker` and `m.add_child(colormap)`) ONLY for continuous numeric gradients/scales. For discrete categories (e.g., period, biome, class), DO NOT use `branca.colormap`—map categories to standard Folium color names (`'blue'`, `'orange'`, `'green'`, `'purple'`, `'darkred'`, `'darkblue'`, `'darkgreen'`).
     5. BASE TILES: ALWAYS use the default OpenStreetMap tiles (e.g., use `folium.Map(...)` without the `tiles` argument). NEVER use 'CartoDB positron' or any other tile sets.
     6. OUTPUT FILE: ALWAYS save the map EXACTLY as '{MAP_FILE_PATH}'.
     7. FORMAT: Provide only a short explanation and the ```python ... ``` code block.
@@ -460,28 +457,6 @@ def agent_node(state):
         ).add_to(m)
     m.add_child(colormap)
     m.save('{MAP_FILE_PATH}')
-
-    # Example 4: Categorical Colors with folium.Marker (NO branca.colormap)
-    # Plan: Filter to the target category subset and map each unique period to a valid Folium named color.
-    # Plot points with folium.Marker using those named colors and add a matching HTML legend.
-    valid_colors = ['orange', 'darkblue', 'green', 'purple', 'cadetblue', 'darkred', 'darkgreen']
-    categories = sorted(df['period_column'].dropna().unique())
-    color_map = {{cat: valid_colors[i % len(valid_colors)] for i, cat in enumerate(categories)}}
-    m = folium.Map(location=[df['latitude'].mean(), df['longitude'].mean()], zoom_start=6)
-    for _, row in df.iterrows():
-        c = color_map.get(row['period_column'], 'blue')
-        folium.Marker(
-            location=[row['latitude'], row['longitude']],
-            popup=str(row['period_column']),
-            icon=folium.Icon(color=c)
-        ).add_to(m)
-    legend_items = "".join(
-        f"<div><span style='background:{{color_map[cat]}};width:12px;height:12px;display:inline-block;margin-right:6px;'></span>{{cat}}</div>"
-        for cat in categories
-    )
-    legend_html = f"<div style='position:fixed;bottom:30px;left:30px;z-index:9999;background:white;padding:10px;border:2px solid grey;font-size:13px;'><b>Legend</b>{{legend_items}}</div>"
-    m.get_root().html.add_child(folium.Element(legend_html))
-    m.save('{MAP_FILE_PATH}')
     """
 
     # Pass all messages exactly as they are. The HumanMessage containing the error 
@@ -513,10 +488,7 @@ def refiner_node(state):
     CRITICAL CHECKLIST:
     1. TARGETED CLEANING: Did it clean/filter ONLY the columns involved in the current request (e.g., active coordinates and active attribute columns)?
     2. NO GLOBAL LOSS: Did it avoid global `df.dropna()` or dropping rows based on unused columns?
-    3. STYLING & COLOR RULES:
-        - For discrete conditions/subsets, ensure it uses a categorical column or boolean mask.
-        - For categorical coloring (e.g., period, biome, class), ensure `branca.colormap` is NOT used and `folium.Icon(color=...)` receives ONLY valid Folium named colors (never hex codes).
-        - Use `branca.colormap.LinearColormap` (with `folium.CircleMarker` and `m.add_child(colormap)`) ONLY when a continuous numeric gradient/scale is explicitly requested.
+    3. STYLING & COLORS: Use `branca.colormap.LinearColormap` ONLY for continuous numeric gradients; for discrete categories, use standard Folium color names (never hex codes or `branca.colormap`).
     4. OUTPUT FILE: Ensure the map is saved EXACTLY as '{MAP_FILE_PATH}' (replace plt.show(), .show(), or any other output filenames).
     5. DATA INTEGRITY: Ensure it loads '{DATA_FILE_PATH}' and uses the exact column names from the summary.
     6. QUERY & SYNTAX: Ensure filters match the user query and fix all syntax or execution errors.
