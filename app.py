@@ -476,10 +476,10 @@ def agent_node(state):
             icon=folium.Icon(color=c)
         ).add_to(m)
     legend_items = "".join(
-        f"<div><span style='background:{color_map[cat]};width:12px;height:12px;display:inline-block;margin-right:6px;'></span>{cat}</div>"
+        f"<div><span style='background:{{color_map[cat]}};width:12px;height:12px;display:inline-block;margin-right:6px;'></span>{{cat}}</div>"
         for cat in categories
     )
-    legend_html = f"<div style='position:fixed;bottom:30px;left:30px;z-index:9999;background:white;padding:10px;border:2px solid grey;font-size:13px;'><b>Legend</b>{legend_items}</div>"
+    legend_html = f"<div style='position:fixed;bottom:30px;left:30px;z-index:9999;background:white;padding:10px;border:2px solid grey;font-size:13px;'><b>Legend</b>{{legend_items}}</div>"
     m.get_root().html.add_child(folium.Element(legend_html))
     m.save('{MAP_FILE_PATH}')
     """
