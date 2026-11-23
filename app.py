@@ -396,8 +396,8 @@ def agent_node(state):
     2. AGGREGATION TO MAPS: When asked for "top N cities" or rankings, calculate the top N using Pandas (`value_counts()` or `groupby()`), filter the original DataFrame to keep ONLY those points/cities, and plot those points or their centroids on the Folium map.
 
     FOLIUM MAP CATEGORY RULES:
-    1. Points/Markers: Use `folium.Marker` or `folium.CircleMarker`.
-    2. Clusters/Hotspots: Use `folium.plugins.MarkerCluster`.
+    1. Points/Markers (DEFAULT): Use `folium.Marker` or `folium.CircleMarker`.
+    2. Clusters/Hotspots: Use `folium.plugins.MarkerCluster` ONLY if the user asks for "clusters" or "hotspots".
     3. Heatmaps: Use `folium.plugins.HeatMap` ONLY if explicitly requested.
     4. Spatial Grids: Use `h3` library for hexagons.
 
@@ -411,10 +411,11 @@ def agent_node(state):
     1. SCOPE: ONLY generate geographic maps.
     2. DATA: Always load data from '{DATA_FILE_PATH}'.
     3. CONDITIONAL STYLING: If styling depends on data conditions (e.g., "southernmost 20", "highest values"), you must first create a new categorical column or boolean mask in Pandas to isolate those specific rows BEFORE building the Folium map.
-    4. COLOR GRADIENTS: For continuous color gradients (e.g., oldest to most recent, low to high), use `import branca.colormap as cm` with `cm.LinearColormap` and `folium.CircleMarker`. Convert datetime columns to numeric values (such as elapsed days) before passing them to the colormap, and attach the legend with `m.add_child(colormap)`. ONLY add a colormap if the user asks for different colors in the visualization.
-    5. BASE TILES: ALWAYS use the default OpenStreetMap tiles (e.g., use `folium.Map(...)` without the `tiles` argument). NEVER use 'CartoDB positron' or any other tile sets.
-    6. OUTPUT FILE: ALWAYS save the map EXACTLY as '{MAP_FILE_PATH}'.
-    7. FORMAT: Provide only a short explanation and the ```python ... ``` code block.
+    4. COLOR GRADIENTS: For continuous color gradients (e.g., oldest to most recent, low to high), use `import branca.colormap as cm` with `cm.LinearColormap` and `folium.CircleMarker`. Convert datetime columns to numeric values (such as elapsed days) before passing them to the colormap, and attach the legend with `m.add_child(colormap)`. ONLY do this if the user specifically asks for a gradient of colors in the visualization.
+    5. DISCRETE COLORS: If the user ask for diffent discrete colors (eg.: different colors for each biome, class, etc), DO NOT use `branca.colormap`. Map categories to standard Folium color names ("red", "darkred", "lightred", "orange", "beige", "green", "darkgreen", "lightgreen", "blue", "darkblue", "lightblue", "cadetblue", "purple", "darkpurple", "pink", "white", "lightgray", "gray", "black") in the command Folim.Marker(location=(<lat>, <lon>), icon=folium.Icon(color=<color_name>)), . . .)
+    6. BASE TILES: ALWAYS use the default OpenStreetMap tiles (e.g., use `folium.Map(...)` without the `tiles` argument). NEVER use 'CartoDB positron' or any other tile sets.
+    7. OUTPUT FILE: ALWAYS save the map EXACTLY as '{MAP_FILE_PATH}'.
+    8. FORMAT: Provide only a short explanation and the ```python ... ``` code block.
 
     PLANNING REQUIREMENT:
     Before writing Python code, write a 2-sentence plan inside `#` comments explaining your data filtering, proxy mapping, and color/layer assignment strategy.
@@ -488,7 +489,7 @@ def refiner_node(state):
     CRITICAL CHECKLIST:
     1. TARGETED CLEANING: Did it clean/filter ONLY the columns involved in the current request (e.g., active coordinates and active attribute columns)?
     2. NO GLOBAL LOSS: Did it avoid global `df.dropna()` or dropping rows based on unused columns?
-    3. STYLING & GRADIENTS: For discrete conditions, ensure it uses a categorical column or boolean mask; for continuous gradients (e.g., oldest to newest), ensure it uses `branca.colormap.LinearColormap` on numeric values and attaches the legend via `m.add_child(colormap)`, ensure the colormap is only used if it is necessary.
+    3. STYLING & COLORS: For continuous gradients, verify that `c = colormap(numeric_val)` is actually passed into `folium.CircleMarker(color=c, fill=True, fill_color=c)` (NEVER `folium.Marker`) alongside `m.add_child(colormap)`. For discrete categories, DO NOT use `branca.colormap`, use standard Folium color names.
     4. OUTPUT FILE: Ensure the map is saved EXACTLY as '{MAP_FILE_PATH}' (replace plt.show(), .show(), or any other output filenames).
     5. DATA INTEGRITY: Ensure it loads '{DATA_FILE_PATH}' and uses the exact column names from the summary.
     6. QUERY & SYNTAX: Ensure filters match the user query and fix all syntax or execution errors.
