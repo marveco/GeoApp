@@ -396,8 +396,8 @@ def agent_node(state):
     2. AGGREGATION TO MAPS: When asked for "top N cities" or rankings, calculate the top N using Pandas (`value_counts()` or `groupby()`), filter the original DataFrame to keep ONLY those points/cities, and plot those points or their centroids on the Folium map.
 
     FOLIUM MAP CATEGORY RULES:
-    1. Points/Spots (DEFAULT): Plot individual points using `folium.CircleMarker` or `folium.Marker` (even if retrieved examples use clusters), ALWAYS use this type of visualization if not explicitly asked for other.
-    2. Clusters/Hotspots: Use `folium.plugins.MarkerCluster` ONLY if the user explicitly asks for "clusters" or "hotspots".
+    1. Points/Markers: Use `folium.Marker` or `folium.CircleMarker`.
+    2. Clusters/Hotspots: Use `folium.plugins.MarkerCluster`.
     3. Heatmaps: Use `folium.plugins.HeatMap` ONLY if explicitly requested.
     4. Spatial Grids: Use `h3` library for hexagons.
 
@@ -411,9 +411,7 @@ def agent_node(state):
     1. SCOPE: ONLY generate geographic maps.
     2. DATA: Always load data from '{DATA_FILE_PATH}'.
     3. CONDITIONAL STYLING: If styling depends on data conditions (e.g., "southernmost 20", "highest values"), you must first create a new categorical column or boolean mask in Pandas to isolate those specific rows BEFORE building the Folium map.
-    4. COLORS:
-        - If the user asks for a gradient of colors: For continuous color gradients (e.g., oldest to most recent, low to high), use `import branca.colormap as cm` with `cm.LinearColormap` and `folium.CircleMarker`. Convert datetime columns to numeric values (such as elapsed days) before passing them to the colormap, and attach the legend with `m.add_child(colormap)`.
-        - When the user don't ask for a gradient or continuous colors: DO NOT use `branca.colormap`, map categories to standard Folium color names (`'blue'`, `'orange'`, `'green'`, `'purple'`, `'darkred'`, `'darkblue'`, `'darkgreen'`).
+    4. COLOR GRADIENTS: For continuous color gradients (e.g., oldest to most recent, low to high), use `import branca.colormap as cm` with `cm.LinearColormap` and `folium.CircleMarker`. Convert datetime columns to numeric values (such as elapsed days) before passing them to the colormap, and attach the legend with `m.add_child(colormap)`. ONLY add a colormap if the user asks for different colors in the visualization.
     5. BASE TILES: ALWAYS use the default OpenStreetMap tiles (e.g., use `folium.Map(...)` without the `tiles` argument). NEVER use 'CartoDB positron' or any other tile sets.
     6. OUTPUT FILE: ALWAYS save the map EXACTLY as '{MAP_FILE_PATH}'.
     7. FORMAT: Provide only a short explanation and the ```python ... ``` code block.
@@ -493,7 +491,7 @@ def refiner_node(state):
     3. STYLING & GRADIENTS: For discrete conditions, ensure it uses a categorical column or boolean mask; for continuous gradients (e.g., oldest to newest), ensure it uses `branca.colormap.LinearColormap` on numeric values and attaches the legend via `m.add_child(colormap)`, ensure the colormap is only used if it is necessary.
     4. OUTPUT FILE: Ensure the map is saved EXACTLY as '{MAP_FILE_PATH}' (replace plt.show(), .show(), or any other output filenames).
     5. DATA INTEGRITY: Ensure it loads '{DATA_FILE_PATH}' and uses the exact column names from the summary.
-    6. MAP TYPE & SYNTAX: Replace `MarkerCluster` or `HeatMap` with individual `CircleMarker`/`Marker` unless the user explicitly asked for clusters/heatmaps, ensure filters match the query, and fix all syntax or execution errors.
+    6. QUERY & SYNTAX: Ensure filters match the user query and fix all syntax or execution errors.
     
     Return ONLY the improved code wrapped in ```python ... ```. Do not explain.
     """
@@ -740,16 +738,16 @@ if prompt := st.chat_input("Ask for a geographic map..."):
 
     # ── Write system log entry ─────────────────────────────────────────────
     log_entry = {
-    "timestamp":              datetime.now().isoformat(timespec="seconds"),
-    "user_session_id":        USER_SESSION_ID,
-    "participant_id":         st.session_state.get("participant_id") or "anonymous",
-    "conversation_id":        active_conv_id,
-    "conversation_name":      st.session_state["conversations"][active_conv_id]["name"],
-    "prompt":                 prompt,
-    "generated_code":         metrics["generated_code"],
-    "refinement_activations": metrics["refinement_activations"],
-    "code_execution_errors":  metrics["code_execution_errors"],
-    "system_errors":          metrics["system_errors"],
-    "response_time_seconds":  response_time,
+        "timestamp":              datetime.now().isoformat(timespec="seconds"),
+        "user_session_id":        USER_SESSION_ID,
+        "participant_id":         st.session_state.get("participant_id") or "anonymous",
+        "conversation_id":        active_conv_id,
+        "conversation_name":      st.session_state["conversations"][active_conv_id]["name"],
+        "prompt":                 prompt,
+        "generated_code":         metrics["generated_code"],
+        "refinement_activations": metrics["refinement_activations"],
+        "code_execution_errors":  metrics["code_execution_errors"],
+        "system_errors":          metrics["system_errors"],
+        "response_time_seconds":  response_time,
     }
     append_log(log_entry)
