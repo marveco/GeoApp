@@ -464,6 +464,10 @@ def agent_node(state):
 
     # Pass all messages exactly as they are. The HumanMessage containing the error 
     # will act as the most recent prompt instructing the LLM to fix the code.
+    if state.get("retry_count", 0) > 0 and len(messages) >= 3:
+        user_msgs = [m for m in messages if m.type == "human" and getattr(m, "name", None) != "error"]
+        original_request = user_msgs[-1] if user_msgs else messages[0]
+        messages = [original_request, messages[-2], messages[-1]]
     msgs_for_llm = [SystemMessage(content=system_prompt)] + messages
 
     response = llm.invoke(msgs_for_llm)
@@ -679,37 +683,46 @@ if prompt := st.chat_input("Ask for a geographic map..."):
     
     with st.chat_message("assistant"):
         with st.status("Analysing and Generating Map…", expanded=True) as status:
+            try:
+                for event in app_graph.stream(inputs, config={"recursion_limit": 25}):
+                    for key, value in event.items():
+                        if "messages" not in value or not value["messages"]:
+                            continue
+                        msg = value["messages"][-1]
 
-            for event in app_graph.stream(inputs, config={"recursion_limit": 25}):
-                for key, value in event.items():
-                    if "messages" not in value or not value["messages"]:
-                        continue
-                    msg = value["messages"][-1]
+                        if key == "agent":
+                            st.write("🧠 Agent is drafting code…")
 
-                    if key == "agent":
-                        st.write("🧠 Agent is drafting code…")
+                        elif key == "refiner":
+                            metrics["refinement_activations"] += 1
+                            st.write("🔍 Refiner is checking code…")
+                            if msg.type == "ai":
+                                final_code_msg = msg.content
+                                code_match = re.search(
+                                    r"```python(.*?)```", msg.content, re.DOTALL
+                                )
+                                if code_match:
+                                    metrics["generated_code"] = code_match.group(1).strip()
 
-                    elif key == "refiner":
-                        metrics["refinement_activations"] += 1
-                        st.write("🔍 Refiner is checking code…")
-                        if msg.type == "ai":
-                            final_code_msg = msg.content
-                            code_match = re.search(
-                                r"```python(.*?)```", msg.content, re.DOTALL
-                            )
-                            if code_match:
-                                metrics["generated_code"] = code_match.group(1).strip()
+                        elif key == "execute_code":
+                            if hasattr(msg, "name") and msg.name == "tool_success":
+                                st.write("✅ Execution successful!")
+                                html_tag = msg.content
+                            elif hasattr(msg, "name") and msg.name == "error":
+                                metrics["code_execution_errors"] += 1
+                                last_error_details = msg.content
+                                st.error("⚠️ Execution failed. Agent is retrying…")
 
-                    elif key == "execute_code":
-                        if hasattr(msg, "name") and msg.name == "tool_success":
-                            st.write("✅ Execution successful!")
-                            html_tag = msg.content
-                        elif hasattr(msg, "name") and msg.name == "error":
-                            metrics["code_execution_errors"] += 1
-                            last_error_details = msg.content  # Store actual error
-                            st.error("⚠️ Execution failed. Agent is retrying…")
+                status.update(label="Process Complete", state="complete")
 
-            status.update(label="Process Complete", state="complete")
+            except Exception as e:
+                metrics["system_errors"] += 1
+                status.update(label="Backend Error", state="error")
+                final_code_msg = (
+                    f"⚠️ **Temporary Server Error:** The model server ran out of memory "
+                    f"while refining the map. Please resend your request or start a new chat.\n\n"
+                    f"`{type(e).__name__}: {e}`"
+                )
 
     # Display detailed error if execution failed completely
     if not html_tag and metrics["code_execution_errors"] > 0:
