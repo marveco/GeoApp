@@ -413,7 +413,7 @@ def agent_node(state):
     3. CONDITIONAL STYLING: If styling depends on data conditions (e.g., "southernmost 20", "highest values"), you must first create a new categorical column or boolean mask in Pandas to isolate those specific rows BEFORE building the Folium map.
     4. COLOR GRADIENTS: ONLY when the user explicitly asks for a gradient/scale of colors, use `import branca.colormap as cm` with `cm.LinearColormap`, pass `c = colormap(val)` to `folium.CircleMarker(..., color=c, fill=True, fill_color=c, popup=...)`, and attach `m.add_child(colormap)`.
     5. DISCRETE COLORS: If the user asks for different discrete colors (e.g., per biome or class), DO NOT use `branca.colormap`. Map categories to valid CSS/Folium color names ('blue', 'orange', 'green', 'purple', 'red', 'darkred', 'darkblue', 'darkgreen', 'cadetblue', 'pink', 'lightblue', 'lightgreen', 'gray', 'black') and pass them to `folium.CircleMarker(..., color=c, fill=True, fill_color=c, popup=...)`.
-    6. POPUPS/CAPTIONS: Always include a concise `popup=` string on each `CircleMarker` showing the queried attribute (e.g., `popup=f"Risk: {{row['fire_risk']}}"`).
+    6. POPUPS/CAPTIONS: Always include a concise and meaningful `popup=` string on each `CircleMarker` showing the queried attribute (e.g., `popup=f"Risk: {{row['fire_risk']}}"`, `popup=f"{{day_period}}"` (morning, afternoon ...)).
     7. BASE TILES: ALWAYS use the default OpenStreetMap tiles (pass `prefer_canvas=True`, never `tiles=...`).
     8. OUTPUT FILE: ALWAYS save the map EXACTLY as '{MAP_FILE_PATH}'.
     9. FORMAT: Provide only a short explanation and the ```python ... ``` code block.
